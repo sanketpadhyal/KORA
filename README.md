@@ -1,29 +1,25 @@
 # Kora
 
-Kora is a TypeScript-first, Redis-inspired key-value service for modern applications. It combines an always-on in-memory data engine, TTL expiration, authenticated HTTP commands, append-only persistence, snapshots, and an npm generator that creates a Vercel gateway plus a Railway deployment target inside any codebase.
+Kora is a TypeScript-first, Redis-inspired key-value service for modern applications. It combines an always-on in-memory data engine, TTL expiration, authenticated HTTP commands, append-only persistence, snapshots, and an npm generator that creates a Railway deployment target inside any codebase.
 
 Kora is designed for backend-only caching, short-lived sessions, counters, rate-limit primitives, and temporary application state. It is not a drop-in replacement for Redis yet: version `0.1.0` exposes a secure HTTP API rather than Redis TCP/RESP compatibility.
 
-## Why Kora uses two deployment targets
+## Railway-first architecture
 
-Vercel is a good host for application routes, but serverless functions do not provide one permanent shared in-memory process. Kora therefore keeps the stateful engine on Railway and deploys a small authenticated gateway to Vercel.
+Kora runs as one always-on Railway service with a persistent volume. Application backend code connects directly to its HTTPS API using a secret Bearer token.
 
 ```text
-Application backend on Vercel
-             |
-             | HTTPS with KORA_GATEWAY_TOKEN
-             v
-Kora gateway on Vercel
-             |
-             | HTTPS with KORA_UPSTREAM_TOKEN
-             v
+Application backend
+       |
+       | HTTPS with KORA_TOKEN
+       v
 Kora engine on Railway
-             |
-             v
+       |
+       v
 RAM + Railway persistent volume
 ```
 
-The browser never receives a Kora token. Application server code calls Kora through the Vercel gateway.
+The browser never receives a Kora token.
 
 ## Current features
 
@@ -35,9 +31,8 @@ The browser never receives a Kora token. Application server code calls Kora thro
 - Append-only file recovery after restarts
 - Snapshot creation and periodic snapshots
 - Typed `KoraClient` for application backends
-- `kora init` scaffold generator
+- `kora init` Railway deployment generator
 - Railway engine template with persistent-volume configuration
-- Vercel gateway template with separate gateway and engine secrets
 
 ## Install and generate a deployment
 
@@ -51,20 +46,14 @@ This creates a new `kora/` directory in the current codebase:
 
 ```text
 kora/
-├── railway/
-│   ├── Dockerfile
-│   ├── railway.toml
-│   ├── package.json
-│   └── .env.example
-├── vercel/
-│   ├── api/kora/[...path].js
-│   ├── vercel.json
-│   ├── package.json
-│   └── .env.example
+├── Dockerfile
+├── railway.toml
+├── package.json
+├── .env.example
 └── README.md
 ```
 
-The generated `kora/README.md` contains the exact Railway and Vercel deployment instructions.
+The generated `kora/README.md` contains the Railway deployment instructions.
 
 ## Application usage
 
@@ -77,8 +66,8 @@ npm install @sanketpadhyal/kora
 Set private environment variables:
 
 ```text
-KORA_URL=https://your-kora-gateway.vercel.app
-KORA_TOKEN=your-kora-gateway-token
+KORA_URL=https://your-kora-engine.up.railway.app
+KORA_TOKEN=your-kora-engine-token
 ```
 
 Use the typed client in a backend route, server action, worker, or API service:
@@ -110,8 +99,6 @@ All routes other than `/health` require `Authorization: Bearer <token>`.
 | `POST` | `/v1/keys/:key/incr` | `{ delta? }` | New numeric value |
 | `GET` | `/v1/stats` | None | Key counts and uptime |
 | `POST` | `/v1/snapshot` | None | Starts a durable snapshot |
-
-When using the Vercel gateway, prefix routes with `/api/kora`.
 
 ## Local development
 
@@ -156,7 +143,7 @@ npm publish
 
 ## Security
 
-Use separate secrets for the Railway engine and Vercel gateway. Keep all Kora tokens in server-side environment variables. Do not expose the Railway engine token or a Vercel gateway token to browsers, mobile clients, or public repositories.
+Keep Kora tokens in server-side environment variables. Do not expose the Kora token to browsers, mobile clients, or public repositories.
 
 ## License
 

@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRequire } from "node:module";
-import { createServer } from "node:http";
 import { KoraStore } from "../dist/engine/store.js";
 import { startKoraServer } from "../dist/engine/server.js";
 import { KoraClient } from "../dist/index.js";
@@ -79,52 +77,22 @@ test("serves authenticated HTTP commands", async () => {
   }
 });
 
-test("scaffolds a Vercel gateway that forwards requests to the Kora engine", async () => {
+test("scaffolds a Railway deployment that installs and runs the Kora engine", async () => {
   const directory = await createDirectory();
-  const engineToken = "an-engine-token-that-is-longer-than-24";
-  const gatewayToken = "a-gateway-token-that-is-longer-than-24";
-  let engine;
-  let gateway;
-  const originalEnvironment = {
-    KORA_UPSTREAM_URL: process.env.KORA_UPSTREAM_URL,
-    KORA_UPSTREAM_TOKEN: process.env.KORA_UPSTREAM_TOKEN,
-    KORA_GATEWAY_TOKEN: process.env.KORA_GATEWAY_TOKEN
-  };
   try {
-    engine = await startKoraServer({ dataDir: join(directory, "data"), token: engineToken, port: 0, snapshotIntervalMs: 60000 });
-    const engineAddress = engine.server.address();
-    assert.ok(engineAddress && typeof engineAddress === "object");
     await scaffoldProject({
       destination: join(directory, "kora"),
       packageName: "@test/kora",
       packageVersion: "^0.1.0"
     });
-    process.env.KORA_UPSTREAM_URL = `http://127.0.0.1:${engineAddress.port}`;
-    process.env.KORA_UPSTREAM_TOKEN = engineToken;
-    process.env.KORA_GATEWAY_TOKEN = gatewayToken;
-    const gatewayPath = join(directory, "kora", "vercel", "api", "kora", "[...path].js");
-    const gatewayRequire = createRequire(join(directory, "kora", "vercel", "package.json"));
-    const handler = gatewayRequire(gatewayPath);
-    gateway = createServer(handler);
-    await new Promise((resolve) => gateway.listen(0, "127.0.0.1", resolve));
-    const gatewayAddress = gateway.address();
-    assert.ok(gatewayAddress && typeof gatewayAddress === "object");
-    const client = new KoraClient({ url: `http://127.0.0.1:${gatewayAddress.port}`, token: gatewayToken });
-    await client.set("gateway:check", { deployed: true }, { ttlSeconds: 60 });
-    assert.deepEqual(await client.get("gateway:check"), {
-      value: { deployed: true },
-      expiresAt: (await client.get("gateway:check")).expiresAt
-    });
+    const packageFile = await readFile(join(directory, "kora", "package.json"), "utf8");
+    const railwayFile = await readFile(join(directory, "kora", "railway.toml"), "utf8");
+    const dockerFile = await readFile(join(directory, "kora", "Dockerfile"), "utf8");
+    assert.match(packageFile, /@test\/kora/);
+    assert.match(packageFile, /"start": "kora start"/);
+    assert.match(railwayFile, /healthcheckPath = "\/health"/);
+    assert.match(dockerFile, /KORA_DATA_DIR=\/data/);
   } finally {
-    process.env.KORA_UPSTREAM_URL = originalEnvironment.KORA_UPSTREAM_URL;
-    process.env.KORA_UPSTREAM_TOKEN = originalEnvironment.KORA_UPSTREAM_TOKEN;
-    process.env.KORA_GATEWAY_TOKEN = originalEnvironment.KORA_GATEWAY_TOKEN;
-    if (gateway) {
-      await new Promise((resolve, reject) => gateway.close((error) => error ? reject(error) : resolve()));
-    }
-    if (engine) {
-      await engine.close();
-    }
     await rm(directory, { recursive: true, force: true });
   }
 });

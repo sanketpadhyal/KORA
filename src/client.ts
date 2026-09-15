@@ -32,7 +32,7 @@ export class KoraClient {
   constructor(options: KoraClientOptions) {
     this.url = options.url.replace(/\/+$/, "");
     this.token = options.token;
-    this.pathPrefix = this.normalizePathPrefix(options.pathPrefix ?? "/api/kora");
+    this.pathPrefix = this.normalizePathPrefix(options.pathPrefix ?? "");
   }
 
   async get<T>(key: string): Promise<KoraEntry<T> | null> {

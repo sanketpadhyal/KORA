@@ -36,7 +36,7 @@ async function initialize(directory: string): Promise<void> {
     packageVersion: `^${manifest.version}`
   });
   process.stdout.write(`Kora deployment files created in ${destination}\n`);
-  process.stdout.write(`Read ${destination}/README.md for Railway and Vercel deployment steps.\n`);
+  process.stdout.write(`Read ${destination}/README.md for Railway deployment steps.\n`);
 }
 
 async function start(argumentsList: string[]): Promise<void> {

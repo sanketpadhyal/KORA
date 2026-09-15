@@ -1,7 +1,7 @@
 {
   "name": "@sanketpadhyal/kora",
   "version": "0.1.0",
-  "description": "A TypeScript-first, Redis-inspired key-value service with a Vercel gateway and Railway data engine.",
+  "description": "A TypeScript-first, Redis-inspired key-value service for Railway deployment.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -32,8 +32,7 @@
     "key-value",
     "redis-inspired",
     "typescript",
-    "railway",
-    "vercel"
+    "railway"
   ],
   "license": "Apache-2.0",
   "publishConfig": {
