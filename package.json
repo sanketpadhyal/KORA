@@ -35,6 +35,14 @@
     "railway"
   ],
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sanketpadhyal/KORA.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sanketpadhyal/KORA/issues"
+  },
+  "homepage": "https://github.com/sanketpadhyal/KORA#readme",
   "publishConfig": {
     "access": "public"
   },

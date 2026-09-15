@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { KoraStore } from "../dist/engine/store.js";
@@ -24,6 +24,21 @@ test("stores values and recovers them from the append-only journal", async () =>
       value: { name: "Sanket", active: true },
       expiresAt: null
     });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("loads snapshots created by the first Kora release", async () => {
+  const directory = await createDirectory();
+  try {
+    await writeFile(join(directory, "snapshot.json"), JSON.stringify({
+      version: 1,
+      records: [["legacy", { value: { migrated: true }, expiresAt: null }]]
+    }));
+    const store = new KoraStore(directory);
+    await store.open();
+    assert.deepEqual(await store.get("legacy"), { value: { migrated: true }, expiresAt: null });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -55,6 +70,51 @@ test("increments values serially", async () => {
   }
 });
 
+test("enforces noeviction limits without losing the previous value", async () => {
+  const directory = await createDirectory();
+  try {
+    const store = new KoraStore({ dataDir: directory, maxMemoryBytes: 12, evictionPolicy: "noeviction" });
+    await store.open();
+    await store.set("small", "one");
+    await assert.rejects(store.set("large", "this cannot fit"), /memory limit exceeded/);
+    assert.deepEqual(await store.get("small"), { value: "one", expiresAt: null });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("evicts least recently used entries and compacts durable history", async () => {
+  const directory = await createDirectory();
+  try {
+    const store = new KoraStore({ dataDir: directory, maxMemoryBytes: 12, evictionPolicy: "lru" });
+    await store.open();
+    await store.set("first", "one");
+    await store.set("second", "two");
+    assert.equal(await store.get("first"), null);
+    assert.deepEqual(await store.get("second"), { value: "two", expiresAt: null });
+    await store.compact();
+    const recovered = new KoraStore({ dataDir: directory, maxMemoryBytes: 12, evictionPolicy: "lru" });
+    await recovered.open();
+    assert.deepEqual(await recovered.get("second"), { value: "two", expiresAt: null });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("enforces rate limits atomically with a fixed expiry window", async () => {
+  const directory = await createDirectory();
+  try {
+    const store = new KoraStore(directory);
+    await store.open();
+    const results = await Promise.all(Array.from({ length: 10 }, () => store.consumeRateLimit("ip:127.0.0.1", 3, 60)));
+    assert.equal(results.filter((result) => result.allowed).length, 3);
+    assert.equal(results.filter((result) => !result.allowed).length, 7);
+    assert.equal(new Set(results.map((result) => result.resetAt)).size, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("serves authenticated HTTP commands", async () => {
   const directory = await createDirectory();
   const token = "a-secure-kora-token-that-is-long-enough";
@@ -67,6 +127,15 @@ test("serves authenticated HTTP commands", async () => {
     const client = new KoraClient({ url: baseUrl, token, pathPrefix: "" });
     const stored = await client.set("hello", "world", { ttlSeconds: 60 });
     assert.deepEqual(await client.get("hello"), { value: "world", expiresAt: stored.expiresAt });
+    assert.equal(await client.ttl("hello") > 0, true);
+    assert.equal(await client.expire("hello", 120), true);
+    assert.equal(await client.exists("hello"), true);
+    assert.equal((await client.consumeRateLimit("limit:hello", 1, 60)).allowed, true);
+    assert.equal((await client.consumeRateLimit("limit:hello", 1, 60)).allowed, false);
+    await client.compact();
+    const metricsResponse = await fetch(`${baseUrl}/metrics`, { headers: { Authorization: `Bearer ${token}` } });
+    assert.equal(metricsResponse.status, 200);
+    assert.match(await metricsResponse.text(), /kora_keys \d+/);
     const rejectedResponse = await fetch(`${baseUrl}/v1/stats`);
     assert.equal(rejectedResponse.status, 401);
   } finally {

@@ -16,8 +16,17 @@ export type KoraEntry<T> = {
 export type KoraStats = {
   keys: number;
   expiringKeys: number;
+  memoryBytes: number;
+  maxMemoryBytes: number | null;
+  evictionPolicy: "lru" | "noeviction";
   startedAt: string;
   uptimeSeconds: number;
+};
+
+export type RateLimitResult = {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
 };
 
 type ErrorPayload = {
@@ -63,6 +72,42 @@ export class KoraClient {
     });
     const payload = (await response.json()) as { value: number };
     return payload.value;
+  }
+
+  async exists(key: string): Promise<boolean> {
+    return (await this.get(key)) !== null;
+  }
+
+  async expire(key: string, ttlSeconds: number): Promise<boolean> {
+    const response = await this.request(`/v1/keys/${encodeURIComponent(key)}/expire`, {
+      method: "POST",
+      body: JSON.stringify({ ttlSeconds })
+    }, [404]);
+    if (response.status === 404) {
+      return false;
+    }
+    return ((await response.json()) as { expires: boolean }).expires;
+  }
+
+  async ttl(key: string): Promise<number> {
+    const response = await this.request(`/v1/keys/${encodeURIComponent(key)}/ttl`, { method: "GET" });
+    return ((await response.json()) as { ttlSeconds: number }).ttlSeconds;
+  }
+
+  async snapshot(): Promise<void> {
+    await this.request("/v1/snapshot", { method: "POST" });
+  }
+
+  async compact(): Promise<void> {
+    await this.request("/v1/compact", { method: "POST" });
+  }
+
+  async consumeRateLimit(key: string, limit: number, windowSeconds: number): Promise<RateLimitResult> {
+    const response = await this.request(`/v1/rate-limits/${encodeURIComponent(key)}`, {
+      method: "POST",
+      body: JSON.stringify({ limit, windowSeconds })
+    }, [429]);
+    return (await response.json()) as RateLimitResult;
   }
 
   async stats(): Promise<KoraStats> {

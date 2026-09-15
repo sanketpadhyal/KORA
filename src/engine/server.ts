@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { KoraStore } from "./store.js";
+import { KoraStore, type EvictionPolicy } from "./store.js";
 
 export type KoraServerOptions = {
   dataDir: string;
@@ -8,6 +8,10 @@ export type KoraServerOptions = {
   port: number;
   host?: string;
   snapshotIntervalMs?: number;
+  compactionIntervalMs?: number;
+  expirationIntervalMs?: number;
+  maxMemoryBytes?: number;
+  evictionPolicy?: EvictionPolicy;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -16,7 +20,7 @@ export async function startKoraServer(options: KoraServerOptions): Promise<{ ser
   if (!options.token || options.token.length < 24) {
     throw new Error("KORA_TOKEN must contain at least 24 characters");
   }
-  const store = new KoraStore(options.dataDir);
+  const store = new KoraStore({ dataDir: options.dataDir, maxMemoryBytes: options.maxMemoryBytes, evictionPolicy: options.evictionPolicy });
   await store.open();
   const server = createServer((request, response) => {
     void handleRequest(request, response, store, options.token);
@@ -27,6 +31,18 @@ export async function startKoraServer(options: KoraServerOptions): Promise<{ ser
       }, options.snapshotIntervalMs)
     : undefined;
   interval?.unref();
+  const compactionInterval = options.compactionIntervalMs && options.compactionIntervalMs > 0
+    ? setInterval(() => {
+        void store.compact();
+      }, options.compactionIntervalMs)
+    : undefined;
+  compactionInterval?.unref();
+  const expirationInterval = options.expirationIntervalMs && options.expirationIntervalMs > 0
+    ? setInterval(() => {
+        void store.pruneExpired();
+      }, options.expirationIntervalMs)
+    : undefined;
+  expirationInterval?.unref();
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(options.port, options.host ?? "0.0.0.0", () => {
@@ -40,6 +56,12 @@ export async function startKoraServer(options: KoraServerOptions): Promise<{ ser
     close: async () => {
       if (interval) {
         clearInterval(interval);
+      }
+      if (expirationInterval) {
+        clearInterval(expirationInterval);
+      }
+      if (compactionInterval) {
+        clearInterval(compactionInterval);
       }
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
@@ -67,13 +89,22 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
       return;
     }
     const parts = url.pathname.split("/").filter(Boolean);
+    if (request.method === "GET" && url.pathname === "/metrics") {
+      sendMetrics(response, await store.stats());
+      return;
+    }
     if (request.method === "GET" && url.pathname === "/v1/stats") {
-      sendJson(response, 200, store.stats());
+      sendJson(response, 200, await store.stats());
       return;
     }
     if (request.method === "POST" && url.pathname === "/v1/snapshot") {
       await store.snapshot();
       sendJson(response, 202, { status: "snapshot-created" });
+      return;
+    }
+    if (request.method === "POST" && url.pathname === "/v1/compact") {
+      await store.compact();
+      sendJson(response, 202, { status: "compacted" });
       return;
     }
     if (parts.length === 3 && parts[0] === "v1" && parts[1] === "keys") {
@@ -107,6 +138,32 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
         sendJson(response, deleted ? 200 : 404, { deleted });
         return;
       }
+    }
+    if (parts.length === 4 && parts[0] === "v1" && parts[1] === "keys" && parts[3] === "ttl" && request.method === "GET") {
+      sendJson(response, 200, { ttlSeconds: await store.ttl(decodeURIComponent(parts[2])) });
+      return;
+    }
+    if (parts.length === 4 && parts[0] === "v1" && parts[1] === "keys" && parts[3] === "expire" && request.method === "POST") {
+      const body = await readJson(request);
+      if (typeof body.ttlSeconds !== "number" || !Number.isFinite(body.ttlSeconds)) {
+        sendJson(response, 400, { error: "ttlSeconds must be a finite number" });
+        return;
+      }
+      const expires = await store.expire(decodeURIComponent(parts[2]), body.ttlSeconds);
+      sendJson(response, expires ? 200 : 404, { expires });
+      return;
+    }
+    if (parts.length === 3 && parts[0] === "v1" && parts[1] === "rate-limits" && request.method === "POST") {
+      const body = await readJson(request);
+      const limit = body.limit;
+      const windowSeconds = body.windowSeconds;
+      if (typeof limit !== "number" || !Number.isSafeInteger(limit) || typeof windowSeconds !== "number" || !Number.isFinite(windowSeconds)) {
+        sendJson(response, 400, { error: "limit must be an integer and windowSeconds must be a finite number" });
+        return;
+      }
+      const result = await store.consumeRateLimit(decodeURIComponent(parts[2]), limit, windowSeconds);
+      sendJson(response, result.allowed ? 200 : 429, result);
+      return;
     }
     if (parts.length === 4 && parts[0] === "v1" && parts[1] === "keys" && parts[3] === "incr" && request.method === "POST") {
       const body = await readJson(request);
@@ -165,4 +222,22 @@ function sendJson(response: ServerResponse, status: number, payload: unknown): v
     "cache-control": "no-store"
   });
   response.end(JSON.stringify(payload));
+}
+
+function sendMetrics(response: ServerResponse, stats: Awaited<ReturnType<KoraStore["stats"]>>): void {
+  const maximum = stats.maxMemoryBytes ?? 0;
+  const lines = [
+    "# TYPE kora_keys gauge",
+    `kora_keys ${stats.keys}`,
+    "# TYPE kora_expiring_keys gauge",
+    `kora_expiring_keys ${stats.expiringKeys}`,
+    "# TYPE kora_memory_bytes gauge",
+    `kora_memory_bytes ${stats.memoryBytes}`,
+    "# TYPE kora_memory_limit_bytes gauge",
+    `kora_memory_limit_bytes ${maximum}`,
+    "# TYPE kora_uptime_seconds gauge",
+    `kora_uptime_seconds ${stats.uptimeSeconds}`
+  ];
+  response.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8", "cache-control": "no-store" });
+  response.end(`${lines.join("\n")}\n`);
 }

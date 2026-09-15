@@ -17,6 +17,10 @@ In Railway, attach a persistent volume at `/data`, then set these variables:
 KORA_TOKEN=replace-with-a-32-character-or-longer-secret
 KORA_DATA_DIR=/data
 KORA_SNAPSHOT_INTERVAL_MS=300000
+KORA_COMPACTION_INTERVAL_MS=3600000
+KORA_EXPIRATION_INTERVAL_MS=1000
+KORA_MAX_MEMORY_MB=128
+KORA_EVICTION_POLICY=lru
 ```
 
 After deployment, copy the Railway public domain, for example `https://kora-engine-production.up.railway.app`. This is the Kora URL used by the application's backend.
@@ -60,7 +64,13 @@ Do not expose `KORA_TOKEN` in browser code.
 | `PUT` | `/v1/keys/:key` | Store `{ value, ttlSeconds? }` |
 | `DELETE` | `/v1/keys/:key` | Delete a value |
 | `POST` | `/v1/keys/:key/incr` | Increment `{ delta? }` |
+| `GET` | `/v1/keys/:key/ttl` | Read remaining TTL |
+| `POST` | `/v1/keys/:key/expire` | Set `{ ttlSeconds }` on an existing key |
+| `POST` | `/v1/rate-limits/:key` | Consume `{ limit, windowSeconds }` atomically |
 | `GET` | `/v1/stats` | Inspect key and expiry counts |
+| `GET` | `/metrics` | Prometheus-compatible metrics |
+| `POST` | `/v1/snapshot` | Create an atomic snapshot |
+| `POST` | `/v1/compact` | Snapshot and compact the append-only log |
 
 ## Local test
 
