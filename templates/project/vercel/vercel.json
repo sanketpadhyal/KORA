@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/kora/[...path].js": {
+      "maxDuration": 30
+    }
+  }
+}

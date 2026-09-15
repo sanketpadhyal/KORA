@@ -1,0 +1,15 @@
+{
+  "name": "kora-engine",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "kora start"
+  },
+  "dependencies": {
+    "{{PACKAGE_NAME}}": "{{PACKAGE_VERSION}}"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

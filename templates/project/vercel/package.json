@@ -1,0 +1,12 @@
+{
+  "name": "kora-vercel-gateway",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "npx vercel dev",
+    "deploy": "npx vercel --prod"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
