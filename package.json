@@ -25,6 +25,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-templates.mjs",
     "test": "npm run build && node --test test/*.test.mjs",
+    "prepare": "npm run build",
     "prepack": "npm run build"
   },
   "keywords": [
