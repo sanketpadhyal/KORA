@@ -14,7 +14,9 @@ type PackageManifest = {
 async function main(): Promise<void> {
   const [command, ...argumentsList] = process.argv.slice(2);
   if (command === "init") {
-    await initialize(argumentsList[0] ?? "kora");
+    const directory = argumentsList[0] ?? "kora";
+    const flags = parseFlags(argumentsList.slice(1));
+    await initialize(directory, flags.packageSource);
     return;
   }
   if (command === "start") {
@@ -25,7 +27,7 @@ async function main(): Promise<void> {
   process.exitCode = 1;
 }
 
-async function initialize(directory: string): Promise<void> {
+async function initialize(directory: string, packageSource?: string): Promise<void> {
   const destination = resolve(process.cwd(), directory);
   if (existsSync(destination)) {
     throw new Error(`${destination} already exists`);
@@ -34,7 +36,7 @@ async function initialize(directory: string): Promise<void> {
   await scaffoldProject({
     destination,
     packageName: manifest.name,
-    packageVersion: `^${manifest.version}`
+    packageSpec: packageSource ?? `^${manifest.version}`
   });
   process.stdout.write(`Kora deployment files created in ${destination}\n`);
   process.stdout.write(`Read ${destination}/README.md for Railway deployment steps.\n`);
@@ -114,7 +116,7 @@ async function loadManifest(): Promise<PackageManifest> {
 
 function printUsage(): void {
   process.stdout.write("Usage:\n");
-  process.stdout.write("  kora init [directory]\n");
+  process.stdout.write("  kora init [directory] [--package-source package-spec]\n");
   process.stdout.write("  kora start [--port 8080] [--data-dir ./data] [--max-memory-mb 128] [--eviction-policy lru] [--token secret]\n");
 }
 

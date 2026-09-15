@@ -152,12 +152,13 @@ test("scaffolds a Railway deployment that installs and runs the Kora engine", as
     await scaffoldProject({
       destination: join(directory, "kora"),
       packageName: "@test/kora",
-      packageVersion: "^0.1.0"
+      packageSpec: "github:test/kora#main"
     });
     const packageFile = await readFile(join(directory, "kora", "package.json"), "utf8");
     const railwayFile = await readFile(join(directory, "kora", "railway.toml"), "utf8");
     const dockerFile = await readFile(join(directory, "kora", "Dockerfile"), "utf8");
     assert.match(packageFile, /@test\/kora/);
+    assert.match(packageFile, /github:test\/kora#main/);
     assert.match(packageFile, /"start": "kora start"/);
     assert.match(railwayFile, /healthcheckPath = "\/health"/);
     assert.match(dockerFile, /KORA_DATA_DIR=\/data/);

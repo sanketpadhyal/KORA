@@ -40,7 +40,14 @@ The browser never receives a Kora token.
 
 ## Install and generate a deployment
 
-After the package is published to npm:
+Use Kora from GitHub today:
+
+```bash
+npm install @sanketpadhyal/kora@github:sanketpadhyal/KORA#main
+npx kora init kora-engine --package-source github:sanketpadhyal/KORA#main
+```
+
+After the package is published to npm, the shorter workflow is:
 
 ```bash
 npx @sanketpadhyal/kora@latest init
@@ -65,6 +72,12 @@ Install Kora in server-side application code:
 
 ```bash
 npm install @sanketpadhyal/kora
+```
+
+Until the first npm release, use this equivalent command instead:
+
+```bash
+npm install @sanketpadhyal/kora@github:sanketpadhyal/KORA#main
 ```
 
 Set private environment variables:

@@ -30,7 +30,7 @@ After deployment, copy the Railway public domain, for example `https://kora-engi
 Install the Kora package in the application's backend:
 
 ```bash
-npm install {{PACKAGE_NAME}}
+npm install {{PACKAGE_NAME}}@{{PACKAGE_SPEC}}
 ```
 
 Set backend-only environment variables:

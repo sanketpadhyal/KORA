@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 export type ScaffoldOptions = {
   destination: string;
   packageName: string;
-  packageVersion: string;
+  packageSpec: string;
 };
 
 export async function scaffoldProject(options: ScaffoldOptions): Promise<void> {
@@ -14,7 +14,7 @@ export async function scaffoldProject(options: ScaffoldOptions): Promise<void> {
   await cp(templateDirectory, options.destination, { recursive: true, errorOnExist: true, force: false });
   await replacePlaceholders(options.destination, {
     PACKAGE_NAME: options.packageName,
-    PACKAGE_VERSION: options.packageVersion
+    PACKAGE_SPEC: options.packageSpec
   });
 }
 

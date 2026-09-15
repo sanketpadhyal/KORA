@@ -7,7 +7,7 @@
     "start": "kora start"
   },
   "dependencies": {
-    "{{PACKAGE_NAME}}": "{{PACKAGE_VERSION}}"
+    "{{PACKAGE_NAME}}": "{{PACKAGE_SPEC}}"
   },
   "engines": {
     "node": ">=22"
