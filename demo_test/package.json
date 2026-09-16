@@ -1,0 +1,13 @@
+{
+  "name": "kora-login-demo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "prestart": "npm --prefix .. run build",
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
